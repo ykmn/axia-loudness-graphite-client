@@ -1,4 +1,6 @@
-An <a href = "https://tech.ebu.ch/docs/events/ibc11-ebutechnical/presentations/ibc11_10things_r128.pdf">EBU R128</a> loudness meter for <a href = "http://en.wikipedia.org/wiki/Livewire_%28networking%29">Axia Livewire</a>, an AoIP standard used in broadcast. The client subscribes to an Axia channel's multicast UDP/RTP stream, computes an EBU R128 short-term loudness measurement, and logs the results to your <a href = "http://graphite.readthedocs.org/en/latest/overview.html">Graphite</a> server via its <a href = "http://graphite.readthedocs.org/en/latest/feeding-carbon.html#the-plaintext-protocol">plaintext protocol</a>. Resolution is one measurement per second.  Very useful for loudness logging, visualization, or putting together a <a href = "https://raw.githubusercontent.com/kylophone/axia-loudness-graphite-client/master/dashboard.gif">realtime loudness dashboard</a>.
+> v.2026-03-30
+
+An <a href = "https://tech.ebu.ch/docs/events/ibc11-ebutechnical/presentations/ibc11_10things_r128.pdf">EBU R128</a> loudness meter for <a href = "http://en.wikipedia.org/wiki/Livewire_%28networking%29">Axia Livewire</a>, an AoIP standard used in broadcast. The client subscribes to an Axia channel's multicast UDP/RTP stream, computes an EBU R128 short-term loudness measurement, and logs the results to your <a href = "http://graphite.readthedocs.org/en/latest/overview.html">Graphite</a> server via its <a href = "http://graphite.readthedocs.org/en/latest/feeding-carbon.html#the-plaintext-protocol">plaintext protocol</a>. Resolution is one measurement per second.  Very useful for loudness logging, visualization, or putting together a <a href = "https://raw.githubusercontent.com/ykmn/axia-loudness-graphite-client/master/grafana.gif">realtime loudness dashboard</a>.
 
 Usage: `axialufsgraphite <Multicast Livewire IP> <Graphite Server IP> <Graphite Metric>`
 
@@ -9,8 +11,9 @@ Example: `axialufsgraphite 239.192.16.205 127.0.0.1 LUFS.Retro.PGM1`
 
 ### Compilation
 ```bash
+cd ~
 git clone https://github.com/ykmn/axia-loudness-graphite-client.git
-# Included into this repo
+# ebur128 is included with this repo
 # git clone https://github.com/jiixyj/libebur128.git
 # cp -r libebur128/ebur128/ axia-loudness-graphite-client/
 cd axia-loudness-graphite-client
@@ -61,10 +64,11 @@ netstat -gn
 
 ### Create startup script
 ```bash
-nano ./getlufs.sh
+sudo nano ~/getlufs.sh
 ```
 ```ini
-killall axialufsgraphite
+#!/bin/bash
+killall axialufsgraphite 2>/dev/null || true
 #                           multicast addr    graphite  metrics name
 # 10004
 /home/axia/axialufsgraphite 239.192.39.20     127.0.0.1   LUFS.Novoe.FM          &\
@@ -78,11 +82,45 @@ killall axialufsgraphite
 /home/axia/axialufsgraphite 239.192.39.19     127.0.0.1   LUFS.Retro.FM          &\
 # 10001
 /home/axia/axialufsgraphite 239.192.39.17     127.0.0.1   LUFS.EuropaPlus.FM     &\
-echo Done.
+echo "All instances started."
+wait
+```
+```bash
+sudo chmod +x ~/getlufs.sh
+```
+
+### Create Axia LUFS service
+```bash
+sudo cat > /etc/systemd/system/axialufs.service
+<<'EOF'
+[Unit]
+Description=Send Livewire LUFS values to Graphite metrics service
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/home/axia/getlufs.sh
+ExecStop=/usr/bin/killall axialufsgraphite
+Restart=always
+RestartSec=10
+User=axia
+# Group=axia   # if needed
+WorkingDirectory=/home/axia
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+sudo systemctl daemon-reload
+sudo systemctl enable --now axialufs.service
+sudo systemctl start axialufs.service
+sudo systemctl status axialufs.service
+sudo systemctl stop  axialufs.service
+sudo systemctl restart axialufs.service
 ```
 
 ---
-# Base Ubuntu config
+# Basic Ubuntu config
 
 ### DNS setup
 ```bash
@@ -147,11 +185,11 @@ sudo nano /etc/environment
 http_proxy="http://172.16.110.000:10808/"
 https_proxy="http://172.16.110.000:10808/"
 ftp_proxy="http://172.16.110.000:10808/"
-no_proxy="localhost,127.0.0.1,localaddress"
+no_proxy="localhost,127.0.0.1,localaddress,yourdomain.local"
 HTTP_PROXY="http://172.16.110.000:10808/"
 HTTPS_PROXY="http://172.16.110.000:10808/"
 FTP_PROXY="http://172.16.110.000:10808/"
-NO_PROXY="localhost,127.0.0.1,localaddress"
+NO_PROXY="localhost,127.0.0.1,localaddress,yourdomain.local"
 ```
 
 ### APT proxy setup
@@ -190,6 +228,7 @@ sudo mkdir -p /var/log/carbon/carbon-cache-a/
 sudo mkdir -p /var/run/carbon/
 sudo mkdir -p /var/lib/graphite/whisper/
 sudo mkdir -p /opt/graphite/conf
+sudo mkdir -p /opt/graphite/storage/log/webapp/
 sudo ln -sf /etc/carbon/storage-schemas.conf /opt/graphite/conf/storage-schemas.conf
 sudo ln -sf /etc/carbon/storage-aggregation.conf /opt/graphite/conf/storage-aggregation.conf
 ```
@@ -236,10 +275,10 @@ sudo cp /etc/carbon/storage-schemas.conf /opt/graphite/conf/storage-schemas.conf
 ```
 
 > [!IMPORTANT]
-> If you have to modify data already stored:
+> If you have to modify data already stored, use:
 > ```bash
 > sudo whisper-resize /var/lib/graphite/whisper/test/metric.wsp 10s:1d 1m:30d
-> # show data inof:
+> # show data info:
 > python3 /usr/bin/whisper-info /var/lib/graphite/whisper/LUFS/Europa/PGM1.wsp
 > ```
 
@@ -363,13 +402,27 @@ echo "deb [signed-by=/etc/apt/keyrings/grafana.key] https://apt.grafana.com stab
 sudo apt update -o Acquire::AllowInsecureRepositories=true
 sudo apt install grafana -o APT::Get::AllowUnauthenticated=true
 ```
-### Configure Grafana
+### Configure Grafana for Active Directory
+> https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/ldap/
 ```bash
 sudo cp /etc/grafana/ldap.toml /etc/grafana/ldap.toml.bak
+# copy preconfigured LDAP file
 sudo cp /etc/grafana/ad.toml /etc/grafana/ldap.toml
 
 sudo nano /etc/grafana/grafana.ini
+```
+```ini
+#################################### Basic Auth ##########################
+[auth.basic]
+enabled = true
 
+#################################### Auth LDAP ##########################
+[auth.ldap]
+enabled = false
+config_file = /etc/grafana/ldap.toml
+allow_sign_up = true
+```
+```bash
 sudo ufw allow 3000/tcp
 sudo systemctl daemon-reload
 sudo systemctl start grafana-server
