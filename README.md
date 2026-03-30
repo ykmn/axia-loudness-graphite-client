@@ -4,13 +4,15 @@ Usage: `axialufsgraphite <Multicast Livewire IP> <Graphite Server IP> <Graphite 
 
 Example: `axialufsgraphite 239.192.16.205 127.0.0.1 LUFS.Retro.PGM1`
 
-Graphite default port for plain-text data connection: 2003
+> [!TIP]
+> Graphite default port for plain-text data connection: 2003
 
 ### Compilation
 ```bash
-git clone https://github.com/kylophone/axia-loudness-graphite-client.git
-#git clone https://github.com/jiixyj/libebur128.git
-#cp -r libebur128/ebur128/ axia-loudness-graphite-client/
+git clone https://github.com/ykmn/axia-loudness-graphite-client.git
+# Included into this repo
+# git clone https://github.com/jiixyj/libebur128.git
+# cp -r libebur128/ebur128/ axia-loudness-graphite-client/
 cd axia-loudness-graphite-client
 gcc axialufsgraphite.c ebur128/ebur128.c \
      -o ../axialufsgraphite \
@@ -27,11 +29,30 @@ ip link set dev ens33 multicast on
 # Enable multicast on LAN NIC
 ip link set dev ens32 multicast off
 
-# Add multicast route to Livewire NIC
+# Add route: send all multicast to Livewire NIC
 ip route add 224.0.0.0/4 dev ens33
-# or
+# or: send only Livewire multicast to Livewire NIC
 sudo route add -net 239.192.0.0 netmask 255.255.0.0 dev ens33
 
+# Create persistant route
+sudo nano /etc/netplan/01-netcfg.yaml
+```
+```yaml
+network:
+  version: 2
+  ethernets:
+    ens33:                    # this is your Livewire NIC
+      addresses:
+        - 172.22.0.99/24      # static IP + netmask 255.255.255.0
+      gateway4: none          # no default gateway
+      nameservers: {}         # no DNS servers
+      routes:
+        - to: 224.0.0.0/4     # full multicast range is reachable 
+#       - to: 239.192.0.0/16  # only Liwevire multicast range is reachable
+          via: 0.0.0.0        # on‑link (no next‑hop)
+          metric: 100
+```
+```bash
 # Run axialufsgraphite and check multicast subscriptions and data arrived:
 netstat -gn
 ```
@@ -123,14 +144,14 @@ sudo nano /etc/environment
 ```
 
 ```ini
-http_proxy="http://172.16.110.230:10808/"
-https_proxy="http://172.16.110.230:10808/"
-ftp_proxy="http://172.16.110.230:10808/"
-no_proxy="localhost,127.0.0.1,localaddress,.europaplus.ru"
-HTTP_PROXY="http://172.16.110.230:10808/"
-HTTPS_PROXY="http://172.16.110.230:10808/"
-FTP_PROXY="http://172.16.110.230:10808/"
-NO_PROXY="localhost,127.0.0.1,localaddress,.europaplus.ru"
+http_proxy="http://172.16.110.000:10808/"
+https_proxy="http://172.16.110.000:10808/"
+ftp_proxy="http://172.16.110.000:10808/"
+no_proxy="localhost,127.0.0.1,localaddress"
+HTTP_PROXY="http://172.16.110.000:10808/"
+HTTPS_PROXY="http://172.16.110.000:10808/"
+FTP_PROXY="http://172.16.110.000:10808/"
+NO_PROXY="localhost,127.0.0.1,localaddress"
 ```
 
 ### APT proxy setup
@@ -139,8 +160,8 @@ sudo nano /etc/apt/apt.conf.d/90curtin-aptproxy
 ```
 
 ```ini
-Acquire::http::Proxy "http://172.16.110.230:10808";
-Acquire::https::Proxy "http://172.16.110.230:10808";
+Acquire::http::Proxy "http://172.16.110.000:10808";
+Acquire::https::Proxy "http://172.16.110.000:10808";
 ```
 ### Old kernels cleanup
 ```bash
@@ -218,8 +239,8 @@ sudo cp /etc/carbon/storage-schemas.conf /opt/graphite/conf/storage-schemas.conf
 > If you have to modify data already stored:
 > ```bash
 > sudo whisper-resize /var/lib/graphite/whisper/test/metric.wsp 10s:1d 1m:30d
-> # показать информацию о данных:
-> python3 /usr/bin/whisper-info /var/lib/graphite/whisper/LUFS/channel1.wsp
+> # show data inof:
+> python3 /usr/bin/whisper-info /var/lib/graphite/whisper/LUFS/Europa/PGM1.wsp
 > ```
 
 ### Configure Graphite
@@ -307,7 +328,7 @@ sudo ss -tlpn | grep 8080
 ```
 
 > [!TIP]
-> You should got Graphite API web-interface on http://localhost:8080
+> You should get Graphite API web-interface on http://localhost:8080
 
 ### Graphite settings summary:
 - **Graphite settings:** /etc/graphite/local_settings.py
@@ -336,7 +357,7 @@ echo "deb [signed-by=/etc/apt/keyrings/grafana.key] https://apt.grafana.com stab
 ```
 ### Update your repositories list and install latest release
 > [!WARNING]
-> You may install Grafana without repo signature check, it may be broken.
+> You may want to install Grafana without repo signature check, as it may be broken.
  
 ```bash
 sudo apt update -o Acquire::AllowInsecureRepositories=true
@@ -356,7 +377,7 @@ sudo systemctl status grafana-server
 sudo systemctl enable grafana-server.service
 ```
 
-> [!INFO]  
+> [!TIP]  
 > Graphana should be available at http://localhost:3000/
 > Defalut credentials: admin:admin
 
