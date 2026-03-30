@@ -211,7 +211,30 @@ sudo apt purge $(for tag in "linux-image" "linux-headers"; do dpkg-query -W -f'$
 ```
 
 
-# Graphite, Carbon and Whisper installation
+# Graphite, Carbon and Whisper
+### What is it all about
+
+| Component | Role in the stack | Key responsibilities | Typical usage |
+|-----------|-------------------|----------------------|---------------|
+| **Graphite** | The overall monitoring and graphing system | Collects metrics from applications, stores them, and renders visual graphs via a web UI or allows access to data via its own API | Infrastructure monitoring, performance dashboards, capacity planning |
+| **Carbon** | The data‑ingestion and storage backend for Graphite | - **Carbon Daemon** (`carbon-cache`) receives metric data over the **Carbon protocol** (`plain‑text` or `pickle`) and writes it to disk.<br>- Optional **Carbon Relay** forwards data to one or more Carbon instances for load‑balancing or redundancy. | Runs on each host that receives metrics; can be scaled horizontally by adding more carbon daemons or relays. |
+| **Whisper** | The time‑series database format used by Carbon | - Stores each metric in its own file.<br>- Fixed‑size circular buffers define *retention policies* (e.g., keep 1‑minute data for 24 h, 5‑minute data for 30 d).<br>- No external DB server; reads/writes are simple file I/O. | Provides efficient, low‑overhead storage for high‑cardinality metric streams. |
+
+### How they fit together  
+
+1. Metric producers (applications, servers, *collectd*, *statsd*, *axialufsgraphite* etc.) send data points to the Carbon daemon using the Carbon protocol.
+2. The Carbon daemon writes each point into a Whisper file according to the metric’s *retention schema*.  
+3. Graphite reads the Whisper files on demand, aggregates the data, and generates PNG or interactive graphs that can be viewed via its web interface or queried via its API.  
+
+### Common deployment notes  
+
+- Retention schemas are defined in `storage-schemas.conf`; they control how long high‑resolution data is kept before being aggregated to coarser granularity.  
+- Because Whisper uses a fixed‑size file per metric, disk usage is predictable, but large numbers of unique metric names can lead to many small files; strategies such as metric name aggregation or using a newer storage backend (e.g., Ceres, CarbonAPI) are sometimes employed.  
+- Carbon Relay is useful for high‑throughput environments: producers send to the relay, which distributes to multiple carbon caches, providing redundancy and load distribution. There's no need to use it in current project.
+
+In short, Graphite is the visualization/query layer, Carbon is the data ingest‑and‑store service, and Whisper is the on‑disk time‑series format that actually holds the metric data.
+
+### Installation
 ```bash
 sudo apt update
 sudo apt install -y graphite-web graphite-carbon python3-whisper \
@@ -232,7 +255,7 @@ sudo mkdir -p /opt/graphite/storage/log/webapp/
 sudo ln -sf /etc/carbon/storage-schemas.conf /opt/graphite/conf/storage-schemas.conf
 sudo ln -sf /etc/carbon/storage-aggregation.conf /opt/graphite/conf/storage-aggregation.conf
 ```
-### Configure permissions
+### Set permissions
 ```bash
 sudo chown -R root:root /var/log/carbon/ /var/lib/graphite/whisper/ /var/run/carbon/
 sudo chmod -R 777 /var/log/carbon/ /var/run/carbon/
@@ -275,11 +298,11 @@ sudo cp /etc/carbon/storage-schemas.conf /opt/graphite/conf/storage-schemas.conf
 ```
 
 > [!IMPORTANT]
-> If you have to modify data already stored, use:
+> If you have to modify already stored data, use:
 > ```bash
 > sudo whisper-resize /var/lib/graphite/whisper/test/metric.wsp 10s:1d 1m:30d
 > # show data info:
-> python3 /usr/bin/whisper-info /var/lib/graphite/whisper/LUFS/Europa/PGM1.wsp
+> whisper-info /var/lib/graphite/whisper/LUFS/EuropaPlus/FM.wsp
 > ```
 
 ### Configure Graphite
@@ -295,7 +318,7 @@ sudo grep -E "SECRET_KEY|ALLOWED_HOSTS|TIME_ZONE" /etc/graphite/local_settings.p
 # ALLOWED_HOSTS = [ '*' ]
 # TIME_ZONE = 'Europe/Moscow'
 ```
-### Configure web interface metadata db
+### Configure web interface metadata db for API
 ```bash
 sudo graphite-manage migrate
 sudo chown root:root /var/lib/graphite/graphite.db
@@ -322,11 +345,12 @@ EOF
 ```
 ### Start Carbon Cache
 ```bash
+sudo ufw allow 2003/tcp
 sudo systemctl daemon-reload
 sudo systemctl enable carbon-cache
 sudo systemctl restart carbon-cache
 ```
-### Check data arival
+### Check data arrival
 ```bash
 echo "prod.server.cpu 25 $(date +%s)" | nc -q0 127.0.0.1 2003
 echo "test.success 1 $(date +%s)" | nc -q0 127.0.0.1 2003
@@ -334,7 +358,8 @@ find /var/lib/graphite/whisper -name "success.wsp"
 cat /var/lib/graphite/whisper/prod/server/cpu.wsp
 ```
 
-### Configure Graphite API as a web-service on :8080 used by Grafana
+### Configure Graphite API as a web-service on :8080
+> API will be used by Grafana
 ```bash
 sudo apt update
 sudo apt install gunicorn -y
@@ -360,6 +385,7 @@ EOF
 ```
 ### Start Graphite API
 ```bash
+sudo ufw allow 8080/tcp
 sudo systemctl daemon-reload
 sudo systemctl enable graphite-api
 sudo systemctl restart graphite-api
@@ -370,17 +396,17 @@ sudo ss -tlpn | grep 8080
 > You should get Graphite API web-interface on http://localhost:8080
 
 ### Graphite settings summary:
-- **Graphite settings:** /etc/graphite/local_settings.py
-- **Whisper databases location:** /var/lib/graphite/whisper
+- **Graphite settings:** `/etc/graphite/local_settings.py`
+- **Whisper databases location:** `/var/lib/graphite/whisper`
 Folder permissions are for Carbon user (check Carbon Cache servce)
-- **Graphite log:** /var/log/graphite/info.log
-- **Carbon log:** /var/log/carbon/carbon-cache-a/listener.log
+- **Graphite log:** `/var/log/graphite/info.log`
+- **Carbon log:** `/var/log/carbon/carbon-cache-a/listener.log`
 
 # Grafana installation 
 https://grafana.com/docs/grafana/latest/setup-grafana/installation/debian/
 
 ```bash
-sudo apt-get install -y apt-transport-https wget gnupg
+sudo apt install -y apt-transport-https wget gnupg
 ```
 ### Install repo
 ```bash
@@ -406,7 +432,7 @@ sudo apt install grafana -o APT::Get::AllowUnauthenticated=true
 > https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/ldap/
 ```bash
 sudo cp /etc/grafana/ldap.toml /etc/grafana/ldap.toml.bak
-# copy preconfigured LDAP file
+# copy preconfigured LDAP file, skip if you have not
 sudo cp /etc/grafana/ad.toml /etc/grafana/ldap.toml
 
 sudo nano /etc/grafana/grafana.ini
@@ -422,6 +448,7 @@ enabled = false
 config_file = /etc/grafana/ldap.toml
 allow_sign_up = true
 ```
+### Enable Grafana service
 ```bash
 sudo ufw allow 3000/tcp
 sudo systemctl daemon-reload
