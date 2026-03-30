@@ -35,7 +35,7 @@ ip route add 224.0.0.0/4 dev ens33
 sudo route add -net 239.192.0.0 netmask 255.255.0.0 dev ens33
 
 # Create persistant route
-sudo nano /etc/netplan/01-netcfg.yaml
+sudo nano /etc/netplan/50-cloud-init.yaml
 ```
 ```yaml
 network:
@@ -48,7 +48,7 @@ network:
       nameservers: {}         # no DNS servers
       routes:
         - to: 224.0.0.0/4     # full multicast range is reachable 
-#       - to: 239.192.0.0/16  # only Liwevire multicast range is reachable
+#        - to: 239.192.0.0/16  # only Liwevire multicast range is reachable
           via: 0.0.0.0        # on‑link (no next‑hop)
           metric: 100
 ```
