@@ -12,6 +12,7 @@ Example: `axialufsgraphite 239.192.16.205 127.0.0.1 LUFS.Retro.PGM1`
 ### Compilation
 ```bash
 cd ~
+sudo apt install build-essential
 git clone https://github.com/ykmn/axia-loudness-graphite-client.git
 # ebur128 is included with this repo
 # git clone https://github.com/jiixyj/libebur128.git
@@ -432,7 +433,8 @@ sudo apt install grafana -o APT::Get::AllowUnauthenticated=true
 > https://grafana.com/docs/grafana/latest/setup-grafana/configure-access/configure-authentication/ldap/
 ```bash
 sudo cp /etc/grafana/ldap.toml /etc/grafana/ldap.toml.bak
-# copy preconfigured LDAP file, skip if you have not
+# copy preconfigured LDAP file, skip if you have not.
+# 
 sudo cp /etc/grafana/ad.toml /etc/grafana/ldap.toml
 
 sudo nano /etc/grafana/grafana.ini
@@ -444,10 +446,16 @@ enabled = true
 
 #################################### Auth LDAP ##########################
 [auth.ldap]
-enabled = false
-config_file = /etc/grafana/ldap.toml
-allow_sign_up = true
+enabled = true
 ```
+Web UI settings: Administration / Authentication / LDAP
+> Server host = `dc1`
+> Bind DN = `ldap@domain.local`
+> Bind password = `PaSswOrD`
+> Search filter = `(sAMAccountName=%s)`
+> Search base DNS = `DC=domain,DC=local`
+Save / Test
+
 ### Enable Grafana service
 ```bash
 sudo ufw allow 3000/tcp
