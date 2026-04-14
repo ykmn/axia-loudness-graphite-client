@@ -1,6 +1,12 @@
 > v.2026-03-30
 
-An <a href = "https://tech.ebu.ch/docs/events/ibc11-ebutechnical/presentations/ibc11_10things_r128.pdf">EBU R128</a> loudness meter for <a href = "http://en.wikipedia.org/wiki/Livewire_%28networking%29">Axia Livewire</a>, an AoIP standard used in broadcast. The client subscribes to an Axia channel's multicast UDP/RTP stream, computes an EBU R128 short-term loudness measurement, and logs the results to your <a href = "http://graphite.readthedocs.org/en/latest/overview.html">Graphite</a> server via its <a href = "http://graphite.readthedocs.org/en/latest/feeding-carbon.html#the-plaintext-protocol">plaintext protocol</a>. Resolution is one measurement per second.  Very useful for loudness logging, visualization, or putting together a <a href = "https://raw.githubusercontent.com/ykmn/axia-loudness-graphite-client/master/grafana.gif">realtime loudness dashboard</a>.
+An [EBU R128](https://tech.ebu.ch/docs/events/ibc11-ebutechnical/presentations/ibc11_10things_r128.pdf) loudness meter for [Axia Livewire](https://en.wikipedia.org/wiki/Livewire_%28networking%), an AoIP standard used in broadcast. The client subscribes to a Livewire channel's multicast UDP/RTP stream, computes an EBU R128 *short-term loudness* measurement, and logs the results to your [Graphite](https://graphite.readthedocs.io/en/latest/overview.html) server via its [Plaintext Protocol](https://graphite.readthedocs.io/en/latest/feeding-carbon.html#the-plaintext-protocol). Resolution is one measurement per second.  Very useful for loudness logging, visualization, or putting together a realtime loudness dashboard.
+
+![](https://raw.githubusercontent.com/ykmn/axia-loudness-graphite-client/master/grafana.gif)
+
+> This project uses [Axia Loudness Graphite Client by @kylophone](https://github.com/kylophone/axia-loudness-graphite-client) and [ebur128 library by @sdroege](https://github.com/sdroege/ebur128)
+
+---
 
 Usage: `axialufsgraphite <Multicast Livewire IP> <Graphite Server IP> <Graphite Metric>`
 
